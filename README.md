@@ -1,6 +1,6 @@
 # mjwarp_adaptor
 
-MuJoCo Warp adaptor for [UniEnv](https://github.com/UniEnvOrg/UniEnv)'s node system (package `unienv_mjwarp`), the
+MuJoCo Warp adaptor for [UniEnv](https://github.com/UniEnvOrg/UniEnv)'s node system (package `mjwarp_adaptor`), the
 counterpart of [genesis_adaptor](https://github.com/UniEnvOrg/genesis_adaptor) for Genesis. Tested with mujoco 4.0.0,
 mujoco-warp 4.0.0 and warp-lang 1.19.0.
 
@@ -26,7 +26,7 @@ step's integration (MuJoCo's convention).
 ```python
 import mujoco
 from unienv_interface.world.env_composer import WorldEnv
-from unienv_mjwarp import ActuatorControlNode, JointStateNode, MjWarpWorld
+from mjwarp_adaptor import ActuatorControlNode, JointStateNode, MjWarpWorld
 
 world = MjWarpWorld(mujoco.MjModel.from_xml_path("robot.xml"), nworld=4096)
 env = WorldEnv(world, [JointStateNode(world, "robot_state", ["joint1", "joint2"]),

@@ -16,7 +16,7 @@ jobs:
           set +e
           log="$RUNNER_TEMP/pytest_$GITHUB_RUN_ID.log"
           sbatch --wait -p fang,bhattacharjee --gres=gpu:1 --constraint="a6000|blackwell|6000ada" -o "$log" \
-            /home/pnt8/workspace/dex_ws/cluster/gh_runner/gpu_pytest.sbatch tracker2 "$GITHUB_WORKSPACE" unienv_mjwarp
+            /home/pnt8/workspace/dex_ws/cluster/gh_runner/gpu_pytest.sbatch tracker2 "$GITHUB_WORKSPACE" mjwarp_adaptor
           status=$?
           grep -vE '^[0-9T:-]+Z \[' "$log" | tail -150
           exit $status
