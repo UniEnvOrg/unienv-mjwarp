@@ -7,7 +7,8 @@ One World.step() is one physics step. A reset is three calls, in UniEnv's order:
     world.after_reset()       # positions and contacts recomputed once, for all worlds
 
 After step(), body positions and contacts are those from before the last integration (MuJoCo's convention);
-after_reset() refreshes them.
+after_reset() refreshes them. A WorldEnv's first reset goes through reload / after_reload, which do the same.
+``seed`` is accepted and unused: the world draws no random numbers.
 
 The step and the recomputation are each recorded once as a CUDA graph and replayed. Launched kernel by kernel from
 Python instead, MuJoCo Warp's forward takes about 6 times longer and allocates GPU memory on every call.
@@ -38,6 +39,7 @@ class MjWarpWorld(World):
         """
         # freed GPU arrays stay in Warp's pool (up to 10% of the GPU) instead of going back to the driver
         wp.set_mempool_release_threshold(wp.get_device(), 0.1)
+        self.mj_model = model  # for name lookups
         self.model = mjw.put_model(model)
         # every world at the model's default joint positions; contacts are found by the first after_reset()
         self.data = mjw.make_data(model, nworld=nworld, nconmax=contacts_per_world, njmax=rows_per_world)
@@ -78,3 +80,5 @@ class MjWarpWorld(World):
     def after_reset(self, *, seed: int | None = None, mask: torch.Tensor | None = None, **kwargs: Any) -> None:
         """Recomputes positions and contacts from the current state (MuJoCo's forward), for all worlds."""
         self._replay(mjw.forward)
+
+    after_reload = after_reset  # the model is fixed, so a reload is a reset
