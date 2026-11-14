@@ -129,7 +129,7 @@ def test_worlds_on_their_own_streams_match_the_default_stream():
     writes and reads with the worlds' steps (the legacy default stream would order them implicitly)."""
     model = mujoco.MjModel.from_xml_string(MODEL)
     ref = MjWarpWorld(model, 4)
-    worlds = [MjWarpWorld(model, 4, stream=wp.Stream()) for _ in range(2)]
+    worlds = [MjWarpWorld(model, 4, stream=wp.Stream(wp.get_device())) for _ in range(2)]
     ref.after_reset()
     for i in range(200):  # torch on its default stream: ordered with the default-stream graphs implicitly
         ref.tensor("ctrl")[:] = 0.001 * i

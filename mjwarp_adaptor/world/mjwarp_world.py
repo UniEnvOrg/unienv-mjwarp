@@ -14,7 +14,7 @@ The step and the recomputation are each recorded once as a CUDA graph and replay
 Python instead, MuJoCo Warp's forward takes about 6 times longer and allocates GPU memory on every call.
 
 By default the graphs run on Warp's current stream, so several worlds (e.g. one per scene) run one after another on
-the GPU. Give each its own stream (``MjWarpWorld(..., stream=wp.Stream())``) and they overlap: step() and
+the GPU. Give each its own stream (``MjWarpWorld(..., stream=wp.Stream(wp.get_device()))``) and they overlap: step() and
 after_reset() then wait, on the GPU, for torch's work queued so far (the caller's writes), and return without
 making torch wait for them. Call join() before torch reads or writes the world's arrays again:
 
