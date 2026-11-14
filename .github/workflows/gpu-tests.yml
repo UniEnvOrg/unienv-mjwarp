@@ -1,0 +1,22 @@
+name: GPU tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    # the self-hosted runner on the Unicorn cluster; the tests run as a Slurm GPU job
+    runs-on: [self-hosted, unicorn]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: pytest on a cluster GPU
+        run: |
+          set +e
+          log="$RUNNER_TEMP/pytest_$GITHUB_RUN_ID.log"
+          sbatch --wait -p fang,bhattacharjee --gres=gpu:1 --constraint="a6000|blackwell|6000ada" -o "$log" \
+            /home/pnt8/workspace/dex_ws/cluster/gh_runner/gpu_pytest.sbatch tracker2 "$GITHUB_WORKSPACE" unienv_mjwarp
+          status=$?
+          grep -vE '^[0-9T:-]+Z \[' "$log" | tail -150
+          exit $status
