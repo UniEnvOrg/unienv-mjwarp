@@ -1,13 +1,14 @@
 [build-system]
-requires = ["setuptools>=64"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "unienv_mjwarp"
 version = "0.0.1"
-description = "MuJoCo Warp adaptor for UniEnv's World"
+description = "MuJoCo Warp adaptor for UniEnv's World / WorldNode / WorldEnv"
+readme = "README.md"
+license = "MIT"
 requires-python = ">=3.10"
-# written against mujoco 4.0.0, mujoco-warp 4.0.0, warp-lang 1.19.0
 dependencies = ["unienv", "mujoco", "mujoco-warp", "torch"]
 
 [tool.setuptools.packages.find]
