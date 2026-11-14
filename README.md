@@ -23,6 +23,10 @@ state, the nodes (or the caller) write their start state through `world.tensor(.
 recomputes positions and contacts for all worlds. After `step()`, positions and contacts are those from before the
 step's integration (MuJoCo's convention).
 
+Package `mjwarp_adaptor_collection` holds specific robots and scenes (as `unienv_genesis_collection` does for Genesis):
+the MANO and Wuji hands (`load_hand`), the hand + object scene (`build_model`, physics settings in `SimConfig`) and
+`HandNode`, the hand's joint state and position targets.
+
 ## Usage
 
 ```python

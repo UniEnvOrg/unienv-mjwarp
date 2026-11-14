@@ -1,0 +1,40 @@
+# Wuji right hand, wuji-hand-description v2026.04.27: model copied by scripts/setup/fetch_wuji.py (vendor actuators).
+mjcf: ~/.cache/tracker2/hands/wuji/right.xml
+glove: ~/.cache/tracker2/hands/wuji/glove.npz
+palm: right_palm_link
+fingers:
+  thumb: [right_finger1_link1, right_finger1_link2, right_finger1_link3, right_finger1_link4]
+  index: [right_finger2_link1, right_finger2_link2, right_finger2_link3, right_finger2_link4]
+  middle: [right_finger3_link1, right_finger3_link2, right_finger3_link3, right_finger3_link4]
+  ring: [right_finger4_link1, right_finger4_link2, right_finger4_link3, right_finger4_link4]
+  pinky: [right_finger5_link1, right_finger5_link2, right_finger5_link3, right_finger5_link4]
+# wrist PD gains: MANO's (assets/hands/mano.yaml) scaled to the 0.518 kg hand (kp by the mass ratio 0.518 / 0.4, kd by
+# its square root), keeping the natural frequency and damping ratio
+wrist_slide_gains: [647.5, 34.1]
+wrist_hinge_gains: [12.95, 0.341]
+dexonomy: wuji
+# glove placement (scripts/setup/make_glove_layout.py): the link of each finger pad (MANO's proximal / middle / distal
+# phalanx -> link2 / link3 / link4; the thumb's proximal / distal -> link3 / link4), and the palm frame's axes in the
+# palm body's frame: toward the thumb, toward the fingertips, out of the palm side
+glove_finger_pads:
+  thumb_distal: right_finger1_link4
+  thumb_proximal: right_finger1_link3
+  index_distal: right_finger2_link4
+  index_middle: right_finger2_link3
+  index_proximal: right_finger2_link2
+  middle_distal: right_finger3_link4
+  middle_middle: right_finger3_link3
+  middle_proximal: right_finger3_link2
+  ring_distal: right_finger4_link4
+  ring_middle: right_finger4_link3
+  ring_proximal: right_finger4_link2
+  little_distal: right_finger5_link4
+  little_middle: right_finger5_link3
+glove_palm_axes: [[0, 1, 0], [0, 0, 1], [1, 0, 0]]
+# template retargeting (scripts/setup/retarget_templates.py): each finger's MCP, PIP, DIP flexion joints (joint2 is
+# the finger's sideways joint)
+retarget_flexion:
+  index: [right_finger2_joint1, right_finger2_joint3, right_finger2_joint4]
+  middle: [right_finger3_joint1, right_finger3_joint3, right_finger3_joint4]
+  ring: [right_finger4_joint1, right_finger4_joint3, right_finger4_joint4]
+  pinky: [right_finger5_joint1, right_finger5_joint3, right_finger5_joint4]

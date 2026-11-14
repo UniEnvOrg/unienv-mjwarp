@@ -1,0 +1,20 @@
+# MANO right hand, mean shape: model built by scripts/setup/build_mano.py (MANO data stays out of git).
+mjcf: ~/.cache/tracker2/hands/mano/right.xml
+glove: ~/.cache/tracker2/hands/mano/glove.npz
+palm: palm
+fingers:
+  thumb: [thumb1, thumb2, thumb3]
+  index: [index1, index2, index3]
+  middle: [middle1, middle2, middle3]
+  ring: [ring1, ring2, ring3]
+  pinky: [pinky1, pinky2, pinky3]
+# wrist PD gains, damped near critical for the 0.4 kg hand (old tracker: vtdex/hand/mano.py WRIST_*_GAINS)
+wrist_slide_gains: [500.0, 30.0]
+wrist_hinge_gains: [10.0, 0.3]
+dexonomy: mano_vtdex
+# template retargeting (scripts/setup/retarget_templates.py): each finger's MCP, PIP, DIP flexion joints
+retarget_flexion:
+  index: [index1_flex, index2_flex, index3_flex]
+  middle: [middle1_flex, middle2_flex, middle3_flex]
+  ring: [ring1_flex, ring2_flex, ring3_flex]
+  pinky: [pinky1_flex, pinky2_flex, pinky3_flex]

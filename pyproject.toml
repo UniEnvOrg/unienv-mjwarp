@@ -9,10 +9,13 @@ description = "MuJoCo Warp adaptor for UniEnv's World / WorldNode / WorldEnv"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
-dependencies = ["unienv", "mujoco", "mujoco-warp", "torch"]
+dependencies = ["unienv", "mujoco", "mujoco-warp", "torch", "numpy", "scipy", "trimesh", "pyyaml"]
 
 [tool.setuptools.packages.find]
 include = ["mjwarp_adaptor*"]
+
+[tool.setuptools.package-data]
+mjwarp_adaptor_collection = ["assets/hands/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
