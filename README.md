@@ -14,7 +14,9 @@ mujoco-warp 4.0.0 and warp-lang 1.19.0.
   | `JointStateNode` | `joint_position`, `joint_velocity` (N, n) of hinge and slide joints |
   | `ActuatorControlNode` | action: the actuators' controls (N, n), within `ctrlrange` |
   | `BodyPoseNode` | `body_pose` (N, 7: position, wxyz), world frame |
+  | `FreeBodyNode` | `body_pose` and `body_velocity` (N, 6) of a body on a free joint; `set_pose`, `set_force` |
   | `ContactForceNode` | `net_force` (N, bodies, 3): total contact force on each body, world frame |
+  | `ContactPointsNode` | no observation; `contacts()`: the points and frames of one body's contacts, in its frame |
 
 A reset is three calls, in UniEnv's order: `world.reset(mask=...)` puts the chosen worlds back to the model's default
 state, the nodes (or the caller) write their start state through `world.tensor(...)`, and `world.after_reset()`

@@ -6,7 +6,15 @@ import mujoco_warp as mjw
 import torch
 from unienv_interface.world.env_composer import WorldEnv
 
-from mjwarp_adaptor import ActuatorControlNode, BodyPoseNode, ContactForceNode, JointStateNode, MjWarpWorld
+from mjwarp_adaptor import (
+    ActuatorControlNode,
+    BodyPoseNode,
+    ContactForceNode,
+    ContactPointsNode,
+    FreeBodyNode,
+    JointStateNode,
+    MjWarpWorld,
+)
 
 MODEL = """
 <mujoco>
@@ -63,3 +71,38 @@ def test_nodes_in_a_world_env():
     weight = float(world.mj_model.body("box").mass[0]) * 9.81
     force = obs["box_contact"]["net_force"][:, 0]
     assert torch.allclose(force, torch.tensor([0.0, 0.0, weight], device=world.device), atol=0.05 * weight), force
+
+
+def test_free_body_node_sets_pose_and_force():
+    world = MjWarpWorld(mujoco.MjModel.from_xml_string(MODEL), 4)
+    box = FreeBodyNode(world, "box", "box")
+    pose = torch.tensor([0.1, 0.2, 0.3, 1.0, 0.0, 0.0, 0.0], device=world.device).repeat(2, 1)
+    worlds = torch.tensor([0, 2], device=world.device)
+    world.reset()
+    world.tensor("qvel")[:] = 1.0
+    box.set_pose(pose, worlds)
+    world.after_reset()
+    obs = box.get_observation()
+    assert torch.allclose(obs["body_pose"][worlds], pose) and (obs["body_velocity"][worlds] == 0).all()
+    assert torch.allclose(obs["body_pose"][1, :3], torch.tensor([0.0, 0.0, 0.1], device=world.device))  # untouched
+    weight = float(world.mj_model.body("box").mass[0]) * 9.81
+    force = torch.zeros(4, 3, device=world.device)
+    force[worlds, 2] = 2 * weight  # twice the weight: accelerates upward at g
+    box.set_force(force)
+    for _ in range(10):
+        world.step()
+    vz = box.get_observation()["body_velocity"][:, 2]
+    expected = 9.81 * 10 * world.world_timestep
+    assert torch.allclose(vz[worlds], torch.full((2,), expected, device=world.device), rtol=0.05), vz
+
+
+def test_contact_points_of_a_resting_box():
+    world = MjWarpWorld(mujoco.MjModel.from_xml_string(MODEL), 4)
+    for _ in range(500):
+        world.step()
+    world_id, point, frame = ContactPointsNode(world, "box_contacts", "box", max_distance=1e-3).contacts()
+    assert set(world_id.tolist()) == {0, 1, 2, 3}
+    assert torch.allclose(point[:, 2], torch.full_like(point[:, 2], -0.02), atol=2e-3), point  # the bottom face
+    down = torch.tensor([0.0, 0.0, -1.0], device=world.device)
+    assert torch.allclose(frame[:, 0], down.expand_as(frame[:, 0]), atol=1e-3), frame[:, 0]  # out of the box
+    assert len(ContactPointsNode(world, "none", "box", max_distance=-1.0).contacts()[0]) == 0

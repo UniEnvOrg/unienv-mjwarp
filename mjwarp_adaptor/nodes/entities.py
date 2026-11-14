@@ -77,3 +77,35 @@ class BodyPoseNode(MjWarpNode):
     def get_observation(self) -> dict[str, torch.Tensor]:
         w = self.world
         return {"body_pose": torch.cat([w.tensor("xpos")[:, self.body], w.tensor("xquat")[:, self.body]], -1)}
+
+
+class FreeBodyNode(MjWarpNode):
+    """A body on a free joint. Observation: ``body_pose`` (N, 7: position, wxyz quaternion, world frame; as MuJoCo
+    computes it, see BodyPoseNode) and ``body_velocity`` (N, 6: linear, world frame, then angular, body frame:
+    MuJoCo's free-joint velocity)."""
+
+    def __init__(self, world: MjWarpWorld, name: str, body: str):
+        super().__init__(world, name)
+        self.body = self.model.body(body).id
+        joint = self.model.body_jntadr[self.body]
+        if self.model.body_jntnum[self.body] != 1 or self.model.jnt_type[joint] != mujoco.mjtJoint.mjJNT_FREE:
+            raise ValueError(f"FreeBodyNode: body {body!r} needs exactly one joint, a free joint")
+        self.qpos_adr, self.dof_adr = int(self.model.jnt_qposadr[joint]), int(self.model.jnt_dofadr[joint])
+        self.observation_space = unbounded_obs_space(world, body_pose=(7,), body_velocity=(6,))
+
+    def get_observation(self) -> dict[str, torch.Tensor]:
+        w = self.world
+        return {"body_pose": torch.cat([w.tensor("xpos")[:, self.body], w.tensor("xquat")[:, self.body]], -1),
+                "body_velocity": w.tensor("qvel")[:, self.dof_adr : self.dof_adr + 6]}  # fmt: skip
+
+    def set_pose(self, pose: torch.Tensor, worlds: torch.Tensor | None = None) -> None:
+        """The start state of ``worlds`` (indices or a mask; None: all): pose (n, 7), zero velocity. Positions and
+        contacts are recomputed by the world's after_reset()."""
+        w = slice(None) if worlds is None else worlds
+        self.world.tensor("qpos")[w, self.qpos_adr : self.qpos_adr + 7] = pose
+        self.world.tensor("qvel")[w, self.dof_adr : self.dof_adr + 6] = 0.0
+
+    def set_force(self, force: torch.Tensor) -> None:
+        """Forces (N, 3: world frame) on the body's centre of mass, held until changed (MjWarpWorld.reset clears
+        them in the worlds it resets)."""
+        self.world.tensor("xfrc_applied")[:, self.body, :3] = force
