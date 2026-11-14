@@ -125,7 +125,7 @@ def test_control_timesteps_of_any_whole_number_of_physics_steps():
 
 def test_worlds_on_their_own_streams_match_the_default_stream():
     """Two worlds on their own streams, stepped interleaved after torch writes their controls, end where a world on
-    the default stream does. Torch runs on a non-blocking stream of its own, so only step() and join() order its
+    the default stream does. Torch runs on a non-blocking stream of its own, so only wait() and join() order its
     writes and reads with the worlds' steps (the legacy default stream would order them implicitly)."""
     model = mujoco.MjModel.from_xml_string(MODEL)
     ref = MjWarpWorld(model, 4)
@@ -137,10 +137,14 @@ def test_worlds_on_their_own_streams_match_the_default_stream():
     qpos, qvel = ref.tensor("qpos").clone(), ref.tensor("qvel").clone()
     with torch.cuda.stream(torch.cuda.Stream()):
         for w in worlds:
+            w.wait()
             w.after_reset()
         for i in range(200):
             for w in worlds:
-                w.tensor("ctrl")[:] = 0.001 * i  # written by torch just before the step reads it
+                w.tensor("ctrl")[:] = 0.001 * i
+            for w in worlds:  # before the steps read the controls
+                w.wait()
+            for w in worlds:
                 w.step()
             for w in worlds:  # before torch writes the next controls
                 w.join()

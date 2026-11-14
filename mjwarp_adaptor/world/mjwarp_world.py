@@ -14,14 +14,19 @@ The step and the recomputation are each recorded once as a CUDA graph and replay
 Python instead, MuJoCo Warp's forward takes about 6 times longer and allocates GPU memory on every call.
 
 By default the graphs run on Warp's current stream, so several worlds (e.g. one per scene) run one after another on
-the GPU. Give each its own stream (``MjWarpWorld(..., stream=wp.Stream(wp.get_device()))``) and they overlap: step() and
-after_reset() then wait, on the GPU, for torch's work queued so far (the caller's writes), and return without
-making torch wait for them. Call join() before torch reads or writes the world's arrays again:
+the GPU. Give each its own stream (``MjWarpWorld(..., stream=wp.Stream(wp.get_device()))``) and they can overlap.
+The caller then orders torch's work and the worlds' with wait() and join() (both GPU-side; the host does not wait):
 
     for w in worlds:
-        w.step()
+        w.wait()    # the world's stream waits for torch's writes queued so far
     for w in worlds:
-        w.join()
+        w.step()    # or after_reset()
+    for w in worlds:
+        w.join()    # torch waits for the step before it reads or writes the world's arrays again
+
+All the wait() calls go before any launch: torch's default stream is CUDA's legacy stream, and anything queued on it
+(such as the event wait() records) waits for every stream's work so far, so a wait() between two launches would make
+the second world wait for the first.
 """
 
 from __future__ import annotations
@@ -46,7 +51,8 @@ class MjWarpWorld(World):
             model: the scene.
             nworld: the number of copies (the world's batch size).
             contacts_per_world, rows_per_world: MuJoCo Warp's contact and constraint buffer sizes (None: its defaults).
-            stream: the CUDA stream the step and the recomputation run on (None: Warp's current stream). See join().
+            stream: the CUDA stream the step and the recomputation run on (None: Warp's current stream). See wait()
+                and join().
         """
         self.stream = stream
         # freed GPU arrays stay in Warp's pool (up to 10% of the GPU) instead of going back to the driver
@@ -78,13 +84,17 @@ class MjWarpWorld(World):
         return self._tensors[name]
 
     def _replay(self, fn: Callable) -> None:
-        if self.stream is not None:
-            self.stream.wait_stream(wp.stream_from_torch(self.device))  # torch's writes are done before the graph runs
         if fn not in self._graphs:
             with wp.ScopedStream(self.stream), wp.ScopedCapture() as capture:  # ScopedStream(None): no change
                 fn(self.model, self.data)
             self._graphs[fn] = capture.graph
         wp.capture_launch(self._graphs[fn], stream=self.stream)
+
+    def wait(self) -> None:
+        """Makes this world's stream wait, on the GPU, for the work queued on torch's current stream so far (e.g. writes
+        through world.tensor(...)); call it before step() or after_reset(). Without a stream it does nothing."""
+        if self.stream is not None:
+            self.stream.wait_stream(wp.stream_from_torch(self.device))
 
     def join(self) -> None:
         """Makes torch's current stream wait, on the GPU (the host does not wait), for the step and recomputation
