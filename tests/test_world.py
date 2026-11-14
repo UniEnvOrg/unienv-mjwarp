@@ -4,6 +4,7 @@ GPU)."""
 import mujoco
 import mujoco_warp as mjw
 import torch
+import warp as wp
 from unienv_interface.world.env_composer import WorldEnv
 
 from mjwarp_adaptor import (
@@ -120,3 +121,29 @@ def test_control_timesteps_of_any_whole_number_of_physics_steps():
     env.reset()
     _, _, _, _, info = env.step(torch.zeros(2, 1, device=world.device))
     assert abs(float(info["control_step_elapsed_time"]) - 6 / 240) < 1e-9
+
+
+def test_worlds_on_their_own_streams_match_the_default_stream():
+    """Two worlds on their own streams, stepped interleaved after torch writes their controls, end where a world on
+    the default stream does. Torch runs on a non-blocking stream of its own, so only step() and join() order its
+    writes and reads with the worlds' steps (the legacy default stream would order them implicitly)."""
+    model = mujoco.MjModel.from_xml_string(MODEL)
+    ref = MjWarpWorld(model, 4)
+    worlds = [MjWarpWorld(model, 4, stream=wp.Stream()) for _ in range(2)]
+    ref.after_reset()
+    for i in range(200):  # torch on its default stream: ordered with the default-stream graphs implicitly
+        ref.tensor("ctrl")[:] = 0.001 * i
+        ref.step()
+    qpos, qvel = ref.tensor("qpos").clone(), ref.tensor("qvel").clone()
+    with torch.cuda.stream(torch.cuda.Stream()):
+        for w in worlds:
+            w.after_reset()
+        for i in range(200):
+            for w in worlds:
+                w.tensor("ctrl")[:] = 0.001 * i  # written by torch just before the step reads it
+                w.step()
+            for w in worlds:  # before torch writes the next controls
+                w.join()
+        for w in worlds:
+            assert torch.allclose(w.tensor("qpos"), qpos, atol=1e-6)
+            assert torch.allclose(w.tensor("qvel"), qvel, atol=1e-5)
