@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-import mujoco_warp as mjw
-import numpy as np
 import torch
 import warp as wp
 
@@ -23,19 +21,13 @@ class ContactForceNode(MjWarpNode):
         slot = torch.full((self.model.nbody,), self.num_bodies)  # bodies not named: an extra slot, dropped
         slot[[self.model.body(b).id for b in bodies]] = torch.arange(self.num_bodies)
         self.geom_slot = slot[torch.as_tensor(self.model.geom_bodyid)].to(world.device)
-        n = world.data.naconmax
-        self._ids = wp.array(np.arange(n, dtype=np.int32), dtype=int)
-        self._force = wp.zeros(n, dtype=wp.spatial_vector)
         self.observation_space = unbounded_obs_space(world, net_force=(self.num_bodies, 3))
 
     def get_observation(self) -> dict[str, torch.Tensor]:
-        w, d = self.world, self.world.data
-        n = int(d.nacon.numpy()[0])
-        if n > d.naconmax:
-            raise RuntimeError(f"{n} contacts > the buffer's {d.naconmax}: raise MjWarpWorld's contacts_per_world")
-        mjw.contact_force(w.model, d, self._ids, True, self._force)
-        f = wp.to_torch(self._force)[:n, :3]  # world frame, on the contact's second geom (the normal points 0 -> 1)
-        geom, world_id = wp.to_torch(d.contact.geom)[:n].long(), wp.to_torch(d.contact.worldid)[:n].long()
+        w = self.world
+        c = w.contacts(world_frame=True)
+        f = c.force[:, :3]  # on the contact's second geom (the normal points 0 -> 1)
+        geom, world_id = c.geom.long(), c.world.long()
         out = torch.zeros(w.batch_size, self.num_bodies + 1, 3, device=w.device)
         out.index_put_((world_id, self.geom_slot[geom[:, 1]]), f, accumulate=True)
         out.index_put_((world_id, self.geom_slot[geom[:, 0]]), -f, accumulate=True)

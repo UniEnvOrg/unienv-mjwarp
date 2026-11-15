@@ -15,6 +15,7 @@ from mjwarp_adaptor import (
     FreeBodyNode,
     JointStateNode,
     MjWarpWorld,
+    MjWarpWorlds,
 )
 
 MODEL = """
@@ -123,31 +124,58 @@ def test_control_timesteps_of_any_whole_number_of_physics_steps():
     assert abs(float(info["control_step_elapsed_time"]) - 6 / 240) < 1e-9
 
 
-def test_worlds_on_their_own_streams_match_the_default_stream():
-    """Two worlds on their own streams, stepped interleaved after torch writes their controls, end where a world on
-    the default stream does. Torch runs on a non-blocking stream of its own, so only wait() and join() order its
-    writes and reads with the worlds' steps (the legacy default stream would order them implicitly)."""
+def test_a_world_on_its_own_stream_matches_the_default_stream():
+    """A world on its own stream, stepped after torch writes its controls, ends where a world on the default stream
+    does. Torch runs on a non-blocking stream of its own, so only the world's own ordering (step() and after_reset()
+    wait for torch and make torch wait) keeps its writes and reads in order with the steps."""
     model = mujoco.MjModel.from_xml_string(MODEL)
     ref = MjWarpWorld(model, 4)
-    worlds = [MjWarpWorld(model, 4, stream=wp.Stream(wp.get_device())) for _ in range(2)]
     ref.after_reset()
     for i in range(200):  # torch on its default stream: ordered with the default-stream graphs implicitly
         ref.tensor("ctrl")[:] = 0.001 * i
         ref.step()
     qpos, qvel = ref.tensor("qpos").clone(), ref.tensor("qvel").clone()
     with torch.cuda.stream(torch.cuda.Stream()):
-        for w in worlds:
-            w.wait()
-            w.after_reset()
+        worlds = [MjWarpWorld(model, 4, stream=wp.Stream(wp.get_device()))]
+        worlds[0].after_reset()
         for i in range(200):
-            for w in worlds:
-                w.tensor("ctrl")[:] = 0.001 * i
-            for w in worlds:  # before the steps read the controls
-                w.wait()
-            for w in worlds:
-                w.step()
-            for w in worlds:  # before torch writes the next controls
-                w.join()
+            worlds[0].tensor("ctrl")[:] = 0.001 * i
+            worlds[0].step()
         for w in worlds:
             assert torch.allclose(w.tensor("qpos"), qpos, atol=1e-6)
             assert torch.allclose(w.tensor("qvel"), qvel, atol=1e-5)
+
+
+def per_world_force(contacts, nworld):
+    """(nworld, 6) the sum of the contact forces in each world (the contacts' order in the buffer may differ)."""
+    out = torch.zeros(nworld, 6, device=contacts.force.device)
+    return out.index_add_(0, contacts.world.long(), contacts.force)
+
+
+def test_world_group_matches_the_default_stream():
+    """MjWarpWorlds steps worlds on their own streams; torch writes before group.step() and reads after it with no
+    other ordering, and group.contacts() numbers the worlds and geoms across the group."""
+    model = mujoco.MjModel.from_xml_string(MODEL)
+    ref = MjWarpWorld(model, 4)
+    ref.after_reset()
+    for i in range(50):
+        ref.tensor("ctrl")[:] = 0.001 * i
+        for _ in range(4):
+            ref.step()
+    qpos, qvel = ref.tensor("qpos").clone(), ref.tensor("qvel").clone()
+    force = per_world_force(ref.contacts(world_frame=True), 4)
+    assert len(ref.contacts().geom) > 0  # the box on the plane
+    with torch.cuda.stream(torch.cuda.Stream()):
+        group = MjWarpWorlds([MjWarpWorld(model, 4) for _ in range(3)])  # each gets its own stream
+        group.after_reset()
+        for i in range(50):
+            for w in group.worlds:
+                w.tensor("ctrl")[:] = 0.001 * i
+            group.step(4)
+        for w in group.worlds:
+            assert torch.allclose(w.tensor("qpos"), qpos, atol=1e-6)
+            assert torch.allclose(w.tensor("qvel"), qvel, atol=1e-5)
+        c = group.contacts(world_frame=True)
+        assert torch.allclose(per_world_force(c, 12), force.repeat(3, 1), atol=1e-4)
+        scene = (c.world // 4).long()  # worlds 4i..4i+3 are world i's
+        assert torch.equal(c.geom // model.ngeom, torch.stack([scene, scene], 1).to(c.geom.dtype))

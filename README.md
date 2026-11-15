@@ -6,9 +6,11 @@ mujoco-warp 4.0.0 and warp-lang 1.19.0.
 
 - `MjWarpWorld`: one MuJoCo model in `nworld` copies on the GPU. `world.tensor("qpos")` (or any other MuJoCo array
   name) is a torch view of that array, (nworld, ...): writing to it writes to the simulation. One `step()` is one
-  physics step; it and the recomputation after a reset are recorded once as CUDA graphs and replayed. With
-  `stream=wp.Stream(wp.get_device())`, several worlds (e.g. one per scene) overlap on the GPU: `world.wait()` on every
-  world, then their `step()`s, then `world.join()` on each before torch reads or writes their arrays again.
+  physics step; it and the recomputation after a reset are recorded once as CUDA graphs and replayed.
+  `world.contacts()` gives the current contacts (geom pair, world, frame, position, force) as torch views.
+- `MjWarpWorlds`: several worlds (e.g. one per scene) stepped together, each on its own CUDA stream so the GPU
+  overlaps them: `group.step(n)`, `group.after_reset(which)`, and `group.contacts()`, all worlds' contacts in one
+  list. Torch reads and writes every world's arrays right after each call.
 - Nodes over named parts of the model:
 
   | node | observation / action |

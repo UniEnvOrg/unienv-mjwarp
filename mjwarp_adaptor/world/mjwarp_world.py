@@ -14,31 +14,33 @@ The step and the recomputation are each recorded once as a CUDA graph and replay
 Python instead, MuJoCo Warp's forward takes about 6 times longer and allocates GPU memory on every call.
 
 By default the graphs run on Warp's current stream, so several worlds (e.g. one per scene) run one after another on
-the GPU. Give each its own stream (``MjWarpWorld(..., stream=wp.Stream(wp.get_device()))``) and they can overlap.
-The caller then orders torch's work and the worlds' with wait() and join() (both GPU-side; the host does not wait):
-
-    for w in worlds:
-        w.wait()    # the world's stream waits for torch's writes queued so far
-    for w in worlds:
-        w.step()    # or after_reset()
-    for w in worlds:
-        w.join()    # torch waits for the step before it reads or writes the world's arrays again
-
-All the wait() calls go before any launch: torch's default stream is CUDA's legacy stream, and anything queued on it
-(such as the event wait() records) waits for every stream's work so far, so a wait() between two launches would make
-the second world wait for the first.
+the GPU. MjWarpWorlds gives each world its own CUDA stream and steps them together, so the GPU overlaps them. A world on
+its own stream still orders itself with torch: step() and after_reset() make the stream wait for the work queued on
+torch's current stream so far, and torch's stream wait for the launch (on the GPU; the host does not wait), so torch
+reads and writes world.tensor(...) as without a stream.
 """
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any, Callable, NamedTuple
 
 import mujoco
 import mujoco_warp as mjw
+import numpy as np
 import torch
 import warp as wp
 from unienv_interface.backends.pytorch import PyTorchComputeBackend
 from unienv_interface.world import World
+
+
+class Contacts(NamedTuple):
+    """Contacts (C of them), all worlds' in one list: views of MuJoCo Warp's contact buffers."""
+
+    geom: torch.Tensor  # (C, 2) int: the geom pair; the normal points from geom 0 to geom 1
+    world: torch.Tensor  # (C,) int: the world
+    frame: torch.Tensor  # (C, 3, 3): rows normal, tangent, tangent; world frame
+    pos: torch.Tensor  # (C, 3): world frame
+    force: torch.Tensor  # (C, 6): force then torque on geom 1, in the contact frame or the world frame
 
 
 class MjWarpWorld(World):
@@ -51,8 +53,8 @@ class MjWarpWorld(World):
             model: the scene.
             nworld: the number of copies (the world's batch size).
             contacts_per_world, rows_per_world: MuJoCo Warp's contact and constraint buffer sizes (None: its defaults).
-            stream: the CUDA stream the step and the recomputation run on (None: Warp's current stream). See wait()
-                and join().
+            stream: the CUDA stream the step and the recomputation run on (None: Warp's current stream; MjWarpWorlds
+                gives each of its worlds one).
         """
         self.stream = stream
         # freed GPU arrays stay in Warp's pool (up to 10% of the GPU) instead of going back to the driver
@@ -67,6 +69,7 @@ class MjWarpWorld(World):
         self._qpos0 = torch.as_tensor(model.qpos0, device=self.device, dtype=torch.float32)
         self._tensors: dict[str, torch.Tensor] = {}
         self._graphs: dict[Callable, wp.Graph] = {}
+        self._contact_ids = self._contact_force = None  # contact_force()'s buffers, made on its first call
 
     def is_control_timestep_compatible(self, control_timestep: float | None) -> bool:
         """A whole number of physics steps, within rounding (the base class's exact remainder test rejects e.g.
@@ -77,11 +80,43 @@ class MjWarpWorld(World):
         return round(steps) >= 1 and abs(steps - round(steps)) < 1e-9
 
     def tensor(self, name: str) -> torch.Tensor:
-        """A simulation array by MuJoCo's name (``qpos``, ``qvel``, ``ctrl``, ``xpos``, ``xfrc_applied``, ...) as a
-        torch tensor, (nworld, ...): a view, so writing to it writes to the simulation."""
+        """A simulation array by MuJoCo Warp's name (``qpos``, ``qvel``, ``ctrl``, ``xpos``, ``xfrc_applied``, ...;
+        (nworld, ...)) or a contact buffer's (``contact.geom``, ``contact.pos``, ...; (naconmax, ...), all worlds'
+        contacts, the first contact_count() valid) as a torch tensor: a view, made once, so writing to it writes to
+        the simulation."""
         if name not in self._tensors:
-            self._tensors[name] = wp.to_torch(getattr(self.data, name))
+            array = self.data
+            for part in name.split("."):
+                array = getattr(array, part)
+            self._tensors[name] = wp.to_torch(array)
         return self._tensors[name]
+
+    def contact_count(self) -> int:
+        """The number of contacts in the contact buffers (all worlds), read back to the host."""
+        n = int(self.tensor("nacon")[0])
+        if n > self.data.naconmax:
+            raise RuntimeError(f"{n} contacts > the buffer's {self.data.naconmax}: raise contacts_per_world")
+        return n
+
+    def contact_force(self, world_frame: bool = False) -> torch.Tensor:
+        """(naconmax, 6) force then torque of every contact on its second geom (MuJoCo Warp's contact_force), in the
+        contact's frame or the world frame; the first contact_count() rows are valid. A view of one buffer, so the next
+        call overwrites it. Runs on torch's current stream."""
+        if self._contact_force is None:
+            n = self.data.naconmax
+            self._contact_ids = wp.array(np.arange(n, dtype=np.int32), dtype=int)
+            self._contact_force = wp.zeros(n, dtype=wp.spatial_vector)
+        with wp.ScopedStream(wp.stream_from_torch(self.device)):
+            mjw.contact_force(self.model, self.data, self._contact_ids, world_frame, self._contact_force)
+        return wp.to_torch(self._contact_force)
+
+    def contacts(self, world_frame: bool = False) -> Contacts:
+        """The current contacts of all worlds (see Contacts), views of the contact buffers sliced to contact_count();
+        the force is MuJoCo Warp's contact_force, in the contact's frame or the world frame."""
+        n = self.contact_count()
+        t = self.tensor
+        return Contacts(t("contact.geom")[:n], t("contact.worldid")[:n], t("contact.frame").view(-1, 3, 3)[:n],
+                        t("contact.pos")[:n], self.contact_force(world_frame)[:n])  # fmt: skip
 
     def _replay(self, fn: Callable) -> None:
         if fn not in self._graphs:
@@ -90,22 +125,24 @@ class MjWarpWorld(World):
             self._graphs[fn] = capture.graph
         wp.capture_launch(self._graphs[fn], stream=self.stream)
 
-    def wait(self) -> None:
-        """Makes this world's stream wait, on the GPU, for the work queued on torch's current stream so far (e.g. writes
-        through world.tensor(...)); call it before step() or after_reset(). Without a stream it does nothing."""
+    def _wait(self) -> None:
+        """This world's stream waits, on the GPU, for the work queued on torch's current stream so far."""
         if self.stream is not None:
             self.stream.wait_stream(wp.stream_from_torch(self.device))
 
-    def join(self) -> None:
-        """Makes torch's current stream wait, on the GPU (the host does not wait), for the step and recomputation
-        launched on this world's stream so far; call it before torch reads or writes world.tensor(...) again (a write
-        could otherwise land before a pending step has read the old value). Without a stream it does nothing."""
+    def _join(self) -> None:
+        """Torch's current stream waits, on the GPU, for the work launched on this world's stream so far."""
         if self.stream is not None:
             wp.stream_from_torch(self.device).wait_stream(self.stream)
 
+    def _ordered(self, fn: Callable) -> None:
+        self._wait()
+        self._replay(fn)
+        self._join()
+
     def step(self) -> float:
         """One physics step of every world; returns the timestep."""
-        self._replay(mjw.step)
+        self._ordered(mjw.step)
         return self.world_timestep
 
     def reset(self, *, seed: int | None = None, mask: torch.Tensor | None = None, **kwargs: Any) -> None:
@@ -118,6 +155,6 @@ class MjWarpWorld(World):
 
     def after_reset(self, *, seed: int | None = None, mask: torch.Tensor | None = None, **kwargs: Any) -> None:
         """Recomputes positions and contacts from the current state (MuJoCo's forward), for all worlds."""
-        self._replay(mjw.forward)
+        self._ordered(mjw.forward)
 
     after_reload = after_reset  # the model is fixed, so a reload is a reset
