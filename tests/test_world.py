@@ -106,3 +106,17 @@ def test_contact_points_of_a_resting_box():
     down = torch.tensor([0.0, 0.0, -1.0], device=world.device)
     assert torch.allclose(frame[:, 0], down.expand_as(frame[:, 0]), atol=1e-3), frame[:, 0]  # out of the box
     assert len(ContactPointsNode(world, "none", "box", max_distance=-1.0).contacts()[0]) == 0
+
+
+def test_control_timesteps_of_any_whole_number_of_physics_steps():
+    model = mujoco.MjModel.from_xml_string(MODEL)
+    model.opt.timestep = 1 / 240
+    world = MjWarpWorld(model, 2)
+    assert all(world.is_control_timestep_compatible(k * world.world_timestep) for k in range(1, 25))
+    assert all(world.is_control_timestep_compatible(k / 240) for k in range(1, 25))
+    assert not world.is_control_timestep_compatible(2.5 * world.world_timestep)
+    assert not world.is_control_timestep_compatible(0.4 * world.world_timestep)
+    env = WorldEnv(world, ActuatorControlNode(world, "arm", ["hinge"], control_timestep=6 / 240))
+    env.reset()
+    _, _, _, _, info = env.step(torch.zeros(2, 1, device=world.device))
+    assert abs(float(info["control_step_elapsed_time"]) - 6 / 240) < 1e-9

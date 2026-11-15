@@ -50,6 +50,14 @@ class MjWarpWorld(World):
         self._tensors: dict[str, torch.Tensor] = {}
         self._graphs: dict[Callable, wp.Graph] = {}
 
+    def is_control_timestep_compatible(self, control_timestep: float | None) -> bool:
+        """A whole number of physics steps, within rounding (the base class's exact remainder test rejects e.g.
+        6 / 240 s on a 1 / 240 s timestep)."""
+        if control_timestep is None:
+            return True
+        steps = control_timestep / self.world_timestep
+        return round(steps) >= 1 and abs(steps - round(steps)) < 1e-9
+
     def tensor(self, name: str) -> torch.Tensor:
         """A simulation array by MuJoCo's name (``qpos``, ``qvel``, ``ctrl``, ``xpos``, ``xfrc_applied``, ...) as a
         torch tensor, (nworld, ...): a view, so writing to it writes to the simulation."""
