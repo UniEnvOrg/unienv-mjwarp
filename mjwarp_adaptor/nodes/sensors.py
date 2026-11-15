@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import torch
-import warp as wp
 
 from ..world import MjWarpWorld
 from .base import MjWarpNode, unbounded_obs_space
@@ -48,16 +47,15 @@ class ContactPointsNode(MjWarpNode):
     def contacts(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """World (M,) of each contact, and in the body's frame its point (M, 3) and frame (M, 3, 3: rows the normal,
         pointing out of the body, and two tangents)."""
-        w, d = self.world, self.world.data
-        n = int(d.nacon.numpy()[0])
-        if n > d.naconmax:
-            raise RuntimeError(f"{n} contacts > the buffer's {d.naconmax}: raise MjWarpWorld's contacts_per_world")
-        geom = wp.to_torch(d.contact.geom)[:n].long()
+        w = self.world
+        n, t = w.contact_count(), w.tensor
+        geom = t("contact.geom")[:n].long()
         second = self.geom_on_body[geom[:, 1]]
-        keep = (self.geom_on_body[geom[:, 0]] ^ second) & (wp.to_torch(d.contact.dist)[:n] < self.max_distance)
-        world_id = wp.to_torch(d.contact.worldid)[:n].long()[keep]
+        keep = (self.geom_on_body[geom[:, 0]] ^ second) & (t("contact.dist")[:n] < self.max_distance)
+        world_id = t("contact.worldid")[:n].long()[keep]
         # the contact normal points from geom 0 to geom 1
-        frame = wp.to_torch(d.contact.frame).view(-1, 3, 3)[:n][keep] * torch.where(second[keep], -1.0, 1.0)[:, None, None]
-        R, p = self.xmat[world_id, self.body], w.tensor("xpos")[world_id, self.body]
-        point = (R.transpose(-1, -2) @ (wp.to_torch(d.contact.pos)[:n][keep] - p)[..., None])[..., 0]
+        sign = torch.where(second[keep], -1.0, 1.0)[:, None, None]
+        frame = t("contact.frame").view(-1, 3, 3)[:n][keep] * sign
+        R, p = self.xmat[world_id, self.body], t("xpos")[world_id, self.body]
+        point = (R.transpose(-1, -2) @ (t("contact.pos")[:n][keep] - p)[..., None])[..., 0]
         return world_id, point, frame @ R
