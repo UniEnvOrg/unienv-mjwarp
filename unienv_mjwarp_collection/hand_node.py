@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import torch
-from mjwarp_adaptor import MjWarpWorld
-from mjwarp_adaptor.nodes.base import MjWarpNode, unbounded_obs_space
+from unienv_mjwarp import MjWarpWorld
+from unienv_mjwarp.nodes.base import MjWarpNode, unbounded_obs_space
 
 from .hand_object_scene import SceneIndex
 from .hands import Hand

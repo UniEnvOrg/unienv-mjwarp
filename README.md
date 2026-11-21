@@ -1,7 +1,7 @@
-# mjwarp_adaptor
+# unienv-mjwarp
 
-MuJoCo Warp adaptor for [UniEnv](https://github.com/UniEnvOrg/UniEnv)'s node system (package `mjwarp_adaptor`), the
-counterpart of [genesis_adaptor](https://github.com/UniEnvOrg/genesis_adaptor) for Genesis. Tested with mujoco 4.0.0,
+MuJoCo Warp adaptor for [UniEnv](https://github.com/UniEnvOrg/UniEnv)'s node system (package `unienv_mjwarp`), the
+counterpart of [unienv-genesis](https://github.com/UniEnvOrg/unienv-genesis) for Genesis. Tested with mujoco 4.0.0,
 mujoco-warp 4.0.0 and warp-lang 1.19.0.
 
 - `MjWarpWorld`: one MuJoCo model in `nworld` copies on the GPU. `world.tensor("qpos")` (or any other MuJoCo array
@@ -23,7 +23,7 @@ state, the nodes (or the caller) write their start state through `world.tensor(.
 recomputes positions and contacts for all worlds. After `step()`, positions and contacts are those from before the
 step's integration (MuJoCo's convention).
 
-Package `mjwarp_adaptor_collection` holds specific robots and scenes (as `unienv_genesis_collection` does for Genesis):
+Package `unienv_mjwarp_collection` holds specific robots and scenes (as `unienv_genesis_collection` does for Genesis):
 the MANO and Wuji hands (`load_hand`), the hand + object scene (`build_model`, physics settings in `SimConfig`) and
 `HandNode`, the hand's joint state and position targets.
 
@@ -32,7 +32,7 @@ the MANO and Wuji hands (`load_hand`), the hand + object scene (`build_model`, p
 ```python
 import mujoco
 from unienv_interface.world.env_composer import WorldEnv
-from mjwarp_adaptor import ActuatorControlNode, JointStateNode, MjWarpWorld
+from unienv_mjwarp import ActuatorControlNode, JointStateNode, MjWarpWorld
 
 world = MjWarpWorld(mujoco.MjModel.from_xml_path("robot.xml"), nworld=4096)
 env = WorldEnv(world, [JointStateNode(world, "robot_state", ["joint1", "joint2"]),
@@ -49,6 +49,12 @@ passed as-is.
 ## Install and test
 
 ```bash
-pip install --no-deps -e .
+pip install unienv-mjwarp
+```
+
+From a checkout, with the tests:
+
+```bash
+pip install -e '.[test]'
 pytest  # needs a CUDA GPU
 ```

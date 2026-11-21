@@ -6,7 +6,7 @@ import mujoco_warp as mjw
 import torch
 from unienv_interface.world.env_composer import WorldEnv
 
-from mjwarp_adaptor import (
+from unienv_mjwarp import (
     ActuatorControlNode,
     BodyPoseNode,
     ContactForceNode,

@@ -7,9 +7,9 @@ import pytest
 import torch
 import trimesh
 
-from mjwarp_adaptor import FreeBodyNode, MjWarpWorld
-from mjwarp_adaptor_collection import WRIST_JOINTS, HandNode, SimConfig, build_model, load_hand
-from mjwarp_adaptor_collection.hand_object_scene import HAND_GROUP, OBJECT_GROUP
+from unienv_mjwarp import FreeBodyNode, MjWarpWorld
+from unienv_mjwarp_collection import WRIST_JOINTS, HandNode, SimConfig, build_model, load_hand
+from unienv_mjwarp_collection.hand_object_scene import HAND_GROUP, OBJECT_GROUP
 
 
 @pytest.fixture(scope="module", params=["mano", "wuji"])

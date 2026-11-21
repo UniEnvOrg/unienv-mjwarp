@@ -3,19 +3,27 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mjwarp_adaptor"
-version = "0.0.1"
+name = "unienv_mjwarp"
+version = "0.0.1a1"
 description = "MuJoCo Warp adaptor for UniEnv's World / WorldNode / WorldEnv"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
-dependencies = ["unienv", "mujoco", "mujoco-warp", "torch", "numpy", "scipy", "trimesh", "pyyaml"]
+dependencies = ["unienv>=0.0.1b16", "mujoco", "mujoco-warp", "torch", "numpy", "scipy", "trimesh", "pyyaml"]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.urls]
+Homepage = "https://github.com/UniEnvOrg/unienv-mjwarp"
+Repository = "https://github.com/UniEnvOrg/unienv-mjwarp"
+Issues = "https://github.com/UniEnvOrg/unienv-mjwarp/issues"
 
 [tool.setuptools.packages.find]
-include = ["mjwarp_adaptor*"]
+include = ["unienv_mjwarp*"]
 
 [tool.setuptools.package-data]
-mjwarp_adaptor_collection = ["assets/hands/*.yaml"]
+unienv_mjwarp_collection = ["assets/hands/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

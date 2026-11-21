@@ -1,4 +1,4 @@
-"""Hands and the hand + object scene for mjwarp_adaptor (the counterpart of unienv_genesis_collection)."""
+"""Hands and the hand + object scene for unienv_mjwarp (the counterpart of unienv_genesis_collection)."""
 
 from .hand_node import HandNode
 from .hand_object_scene import WRIST_JOINTS, SceneIndex, build_model, wrist_q
