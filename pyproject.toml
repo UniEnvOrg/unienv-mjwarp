@@ -7,7 +7,7 @@ name = "unienv_mjwarp"
 version = "0.0.1a1"
 description = "MuJoCo Warp adaptor for UniEnv's World / WorldNode / WorldEnv"
 readme = "README.md"
-license = "MIT"
+license = "Apache-2.0"
 requires-python = ">=3.10"
 dependencies = ["unienv>=0.0.1b16", "mujoco", "mujoco-warp", "torch", "numpy", "scipy", "trimesh", "pyyaml"]
 
