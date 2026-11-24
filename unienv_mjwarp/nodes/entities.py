@@ -12,6 +12,12 @@ from unienv_interface.space import BoxSpace
 
 from ..world import MjWarpWorld
 from .base import MjWarpNode, unbounded_obs_space
+from .space_metadata import (
+    actuator_action_metadata,
+    body_pose_metadata,
+    free_body_velocity_metadata,
+    joint_state_metadata,
+)
 
 
 class JointStateNode(MjWarpNode):
@@ -25,7 +31,8 @@ class JointStateNode(MjWarpNode):
             raise ValueError("JointStateNode reads hinge and slide joints only")
         self.qpos_adr = torch.as_tensor(self.model.jnt_qposadr[ids], device=world.device)
         self.dof_adr = torch.as_tensor(self.model.jnt_dofadr[ids], device=world.device)
-        self.observation_space = unbounded_obs_space(world, joint_position=(len(ids),), joint_velocity=(len(ids),))
+        self.observation_space = unbounded_obs_space(world, joint_state_metadata(self.model, ids, joints),
+                                                     joint_position=(len(ids),), joint_velocity=(len(ids),))
 
     def get_observation(self) -> dict[str, torch.Tensor]:
         return {"joint_position": self.world.tensor("qpos")[:, self.qpos_adr],  # index tensors copy
@@ -50,7 +57,8 @@ class ActuatorControlNode(MjWarpNode):
         self.control_timestep = control_timestep
         self.ids = torch.as_tensor(ids, device=world.device)
         self.action_space = BoxSpace(PyTorchComputeBackend, bound(lo), bound(hi), torch.float32, device=world.device,
-                                     shape=(world.batch_size, len(ids)))
+                                     shape=(world.batch_size, len(ids)),
+                                     metadata=actuator_action_metadata(self.model, ids, actuators))
         self.control = world.tensor("ctrl")[:, self.ids]
 
     def set_next_action(self, action: torch.Tensor | None) -> None:
@@ -72,7 +80,8 @@ class BodyPoseNode(MjWarpNode):
     def __init__(self, world: MjWarpWorld, name: str, body: str):
         super().__init__(world, name)
         self.body = self.model.body(body).id
-        self.observation_space = unbounded_obs_space(world, body_pose=(7,))
+        md = {"body_pose": body_pose_metadata(body=body)}
+        self.observation_space = unbounded_obs_space(world, md, body_pose=(7,))
 
     def get_observation(self) -> dict[str, torch.Tensor]:
         w = self.world
@@ -91,7 +100,8 @@ class FreeBodyNode(MjWarpNode):
         if self.model.body_jntnum[self.body] != 1 or self.model.jnt_type[joint] != mujoco.mjtJoint.mjJNT_FREE:
             raise ValueError(f"FreeBodyNode: body {body!r} needs exactly one joint, a free joint")
         self.qpos_adr, self.dof_adr = int(self.model.jnt_qposadr[joint]), int(self.model.jnt_dofadr[joint])
-        self.observation_space = unbounded_obs_space(world, body_pose=(7,), body_velocity=(6,))
+        md = {"body_pose": body_pose_metadata(body=body), "body_velocity": free_body_velocity_metadata(body=body)}
+        self.observation_space = unbounded_obs_space(world, md, body_pose=(7,), body_velocity=(6,))
 
     def get_observation(self) -> dict[str, torch.Tensor]:
         w = self.world

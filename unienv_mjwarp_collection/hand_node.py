@@ -5,6 +5,7 @@ from __future__ import annotations
 import torch
 from unienv_mjwarp import MjWarpWorld
 from unienv_mjwarp.nodes.base import MjWarpNode, unbounded_obs_space
+from unienv_mjwarp.nodes.space_metadata import joint_state_metadata
 
 from .hand_object_scene import SceneIndex
 from .hands import Hand
@@ -21,7 +22,8 @@ class HandNode(MjWarpNode):
         g = lambda x: torch.as_tensor(x, device=world.device)  # noqa: E731
         self.J = len(hand.joints)
         self.qpos_adr, self.dof_adr, self.act = g(ix.qpos_adr), g(ix.dof_adr), g(ix.act)
-        self.observation_space = unbounded_obs_space(world, joint_position=(self.J,), joint_velocity=(self.J,))
+        md = joint_state_metadata(self.model, ix.joint[: self.J], hand.joints)
+        self.observation_space = unbounded_obs_space(world, md, joint_position=(self.J,), joint_velocity=(self.J,))
 
     def get_observation(self) -> dict[str, torch.Tensor]:
         return {"joint_position": self.world.tensor("qpos")[:, self.qpos_adr[: self.J]],

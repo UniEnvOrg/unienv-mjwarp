@@ -11,6 +11,7 @@ import warp as wp
 
 from ..world import MjWarpWorld
 from .base import MjWarpNode, unbounded_obs_space
+from .space_metadata import contact_force_metadata
 
 
 class ContactForceNode(MjWarpNode):
@@ -26,7 +27,8 @@ class ContactForceNode(MjWarpNode):
         n = world.data.naconmax
         self._ids = wp.array(np.arange(n, dtype=np.int32), dtype=int)
         self._force = wp.zeros(n, dtype=wp.spatial_vector)
-        self.observation_space = unbounded_obs_space(world, net_force=(self.num_bodies, 3))
+        md = {"net_force": contact_force_metadata(bodies, source=name)}
+        self.observation_space = unbounded_obs_space(world, md, net_force=(self.num_bodies, 3))
 
     def get_observation(self) -> dict[str, torch.Tensor]:
         w, d = self.world, self.world.data

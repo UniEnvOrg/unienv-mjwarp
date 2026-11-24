@@ -18,6 +18,10 @@ mujoco-warp 4.0.0 and warp-lang 1.19.0.
   | `ContactForceNode` | `net_force` (N, bodies, 3): total contact force on each body, world frame |
   | `ContactPointsNode` | no observation; `contacts()`: the points and frames of one body's contacts, in its frame |
 
+  Their spaces carry UniEnv space metadata (`unienv_mjwarp.nodes.space_metadata`): joint and actuator names, units per
+  joint type (hinge: rad, slide: m), pose / force frames. An actuator action gets a `control` and units only when all
+  its actuators are plain position, velocity or motor actuators of the same kind on hinge or slide joints.
+
 A reset is three calls, in UniEnv's order: `world.reset(mask=...)` puts the chosen worlds back to the model's default
 state, the nodes (or the caller) write their start state through `world.tensor(...)`, and `world.after_reset()`
 recomputes positions and contacts for all worlds. After `step()`, positions and contacts are those from before the
